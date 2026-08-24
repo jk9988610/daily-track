@@ -118,8 +118,9 @@
         <ul class="text-gray-300 text-sm space-y-2 list-disc list-inside">
           <li>训练类型：<strong class="text-white">手淫停‑动训练</strong>，通过控制刺激节奏锻炼耐受力</li>
           <li>点击<strong class="text-white">「开始训练」</strong>启动总计时器，总时钟持续运行不暂停</li>
-          <li>感觉接近临界时点击<strong class="text-warning">「掐段(暂停刺激)」</strong>，记录当前时间点并停止刺激，计时器继续走</li>
-          <li>可多次掐段，每次掐段代表一次成功的控精练习</li>
+          <li>感觉接近临界时点击<strong class="text-warning">「掐段(暂停刺激)」</strong>，记录掐断时间点，同时启动<strong class="text-white">掐断暂停计时</strong></li>
+          <li>暂停期间总时钟继续走；感觉恢复后点击<strong class="text-success">「继续刺激」</strong>，记录本次暂停时长</li>
+          <li>可多次掐段，每段记录「掐断时刻 + 暂停时长」两项细致数据</li>
           <li>训练结束时点击<strong class="text-danger">「完全停止(射精结束)」</strong>，记录本次全部分段数据</li>
           <li>掐段越多说明控精练习做得越充分，是进步的重要指标</li>
         </ul>
@@ -128,7 +129,18 @@
       <!-- 停‑动计时器区域 -->
       <div class="bg-surface-card rounded-xl p-6 mb-5 border-2 border-accent/30" id="sm-timer-box">
         <p class="text-gray-400 text-sm text-center mb-1">总已耗时</p>
-        <p id="sm-total-time" class="text-5xl sm:text-6xl font-mono font-bold text-center text-white mb-6">00:00.0</p>
+        <p id="sm-total-time" class="text-5xl sm:text-6xl font-mono font-bold text-center text-white mb-4">00:00.0</p>
+
+        <!-- 掐断暂停计时（暂停刺激时显示） -->
+        <div id="sm-pause-box" class="hidden mb-6 p-4 bg-warning/10 border border-warning/30 rounded-xl text-center">
+          <p class="text-warning text-sm mb-1">掐断暂停计时</p>
+          <p id="sm-pause-time" class="text-3xl font-mono font-bold text-warning">00:00.0</p>
+          <p id="sm-phase-label" class="text-gray-400 text-xs mt-2">已停止刺激，总时钟仍在继续</p>
+        </div>
+
+        <p id="sm-status-badge" class="text-center text-sm mb-4 hidden">
+          <span class="inline-block px-3 py-1 rounded-full bg-success/20 text-success">刺激中</span>
+        </p>
 
         <!-- 操作按钮 -->
         <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
@@ -228,7 +240,7 @@
       <!-- Chart.js 图表 -->
       <div class="bg-surface-card rounded-xl p-5 border border-gray-700/40">
         <h3 class="font-medium text-white mb-4">停‑动训练历史对比</h3>
-        <p class="text-gray-500 text-xs mb-4">柱状图 = 每次训练总时长；圆点 = 各次掐段时间点</p>
+        <p class="text-gray-500 text-xs mb-4">柱状图 = 每次训练总时长；橙点 = 掐断时刻；绿点 = 掐断暂停时长</p>
         <div class="relative" style="height: 320px;">
           <canvas id="training-chart"></canvas>
         </div>
@@ -358,6 +370,48 @@ const Utils = (() => {
 })();
 
 // ─────────────────────────────────────────────
+// 分段数据工具（兼容旧版纯数字格式）
+// ─────────────────────────────────────────────
+const SegmentUtil = (() => {
+  /** 统一为 { at, pauseDuration } 结构 */
+  function normalize(seg) {
+    if (typeof seg === 'number') return { at: seg, pauseDuration: null };
+    return { at: seg.at, pauseDuration: seg.pauseDuration ?? null };
+  }
+
+  /** 格式化单段展示文本 */
+  function format(seg, livePauseSec) {
+    const s = normalize(seg);
+    let text = `掐断 @ ${Utils.formatSeconds(s.at)}`;
+    if (s.pauseDuration != null) {
+      text += ` · 暂停 ${Utils.formatSeconds(s.pauseDuration)}`;
+    } else if (livePauseSec != null) {
+      text += ` · 暂停中 ${Utils.formatSeconds(livePauseSec)}`;
+    }
+    return text;
+  }
+
+  /** 获取掐断时刻（秒） */
+  function getAt(seg) {
+    return normalize(seg).at;
+  }
+
+  /** 获取暂停时长，未完成返回 null */
+  function getPauseDuration(seg) {
+    return normalize(seg).pauseDuration;
+  }
+
+  /** 汇总一次训练的平均暂停时长 */
+  function avgPauseDuration(segments) {
+    const durations = segments.map(normalize).map(s => s.pauseDuration).filter(d => d != null);
+    if (durations.length === 0) return null;
+    return durations.reduce((a, b) => a + b, 0) / durations.length;
+  }
+
+  return { normalize, format, getAt, getPauseDuration, avgPauseDuration };
+})();
+
+// ─────────────────────────────────────────────
 // 模块 4：凯格尔计时器
 // ─────────────────────────────────────────────
 const KegelTimer = (() => {
@@ -459,18 +513,24 @@ const KegelTimer = (() => {
 })();
 
 // ─────────────────────────────────────────────
-// 模块 5：停‑动掐段计时器
+// 模块 5：停‑动掐段计时器（含掐断暂停计时）
 // ─────────────────────────────────────────────
 const StopMotionTimer = (() => {
-  let running = false;       // 总计时是否运行中
-  let completed = false;   // 本次训练是否已结束
-  let startTime = null;    // 训练开始时间戳
-  let segments = [];       // 掐段时间点（秒）
-  let totalDuration = 0;   // 最终总时长（秒）
+  let running = false;
+  let completed = false;
+  let startTime = null;
+  let segments = [];              // { at: 掐断时刻(秒), pauseDuration: 暂停时长(秒)|null }
+  let totalDuration = 0;
   let rafId = null;
+  let mode = 'idle';              // idle | stimulating | paused
+  let pauseStartTime = null;      // 当前掐断暂停开始时间戳
+  let activeSegmentIdx = null;    // 正在暂停中的分段索引
 
   const els = {
     totalTime: document.getElementById('sm-total-time'),
+    pauseBox: document.getElementById('sm-pause-box'),
+    pauseTime: document.getElementById('sm-pause-time'),
+    statusBadge: document.getElementById('sm-status-badge'),
     segmentList: document.getElementById('sm-segment-list'),
     segmentCount: document.getElementById('sm-segment-count'),
     timerBox: document.getElementById('sm-timer-box'),
@@ -482,33 +542,72 @@ const StopMotionTimer = (() => {
     btnSubmit: document.getElementById('sm-submit'),
   };
 
-  /** 获取当前已耗时（秒） */
+  function roundSec(sec) {
+    return Math.round(sec * 10) / 10;
+  }
+
+  /** 获取总已耗时（秒） */
   function getElapsed() {
     if (!startTime) return 0;
     if (completed) return totalDuration;
     return (Date.now() - startTime) / 1000;
   }
 
-  /** 刷新显示 */
+  /** 获取当前掐断暂停已耗时（秒） */
+  function getPauseElapsed() {
+    if (mode !== 'paused' || !pauseStartTime) return 0;
+    return (Date.now() - pauseStartTime) / 1000;
+  }
+
+  /** 更新掐段/继续按钮样式与文案 */
+  function updatePinchButton() {
+    if (mode === 'paused') {
+      els.btnPinch.textContent = '继续刺激';
+      els.btnPinch.className = 'py-3 bg-success hover:bg-green-600 text-white rounded-lg font-bold transition-colors text-sm sm:text-base';
+    } else {
+      els.btnPinch.textContent = '掐段(暂停刺激)';
+      els.btnPinch.className = 'py-3 bg-warning hover:bg-yellow-600 text-white rounded-lg font-bold transition-colors text-sm sm:text-base';
+    }
+  }
+
+  /** 刷新界面 */
   function render() {
     const elapsed = getElapsed();
     els.totalTime.textContent = Utils.formatTime(elapsed * 1000);
 
-    // 渲染分段列表
+    // 掐断暂停计时区域
+    if (mode === 'paused') {
+      els.pauseBox.classList.remove('hidden');
+      els.pauseTime.textContent = Utils.formatTime(getPauseElapsed() * 1000);
+      els.statusBadge.classList.add('hidden');
+    } else if (running && !completed) {
+      els.pauseBox.classList.add('hidden');
+      els.statusBadge.classList.remove('hidden');
+      els.statusBadge.innerHTML = '<span class="inline-block px-3 py-1 rounded-full bg-success/20 text-success">刺激中</span>';
+    } else {
+      els.pauseBox.classList.add('hidden');
+      els.statusBadge.classList.add('hidden');
+    }
+
+    // 分段列表
     if (segments.length === 0) {
       els.segmentList.innerHTML = '<li class="text-gray-500 text-sm text-center py-4">暂无掐段记录，开始训练后点击「掐段」按钮记录</li>';
     } else {
-      els.segmentList.innerHTML = segments.map((sec, i) => `
-        <li class="flex items-center justify-between bg-surface rounded-lg px-4 py-2.5 text-sm">
-          <span class="text-gray-400">第 ${i + 1} 段</span>
-          <span class="font-mono text-warning font-medium">${Utils.formatSeconds(sec)}</span>
-        </li>
-      `).join('');
+      els.segmentList.innerHTML = segments.map((seg, i) => {
+        const isActive = i === activeSegmentIdx && mode === 'paused';
+        const livePause = isActive ? getPauseElapsed() : null;
+        return `
+          <li class="flex items-center justify-between bg-surface rounded-lg px-4 py-2.5 text-sm gap-2">
+            <span class="text-gray-400 shrink-0">第 ${i + 1} 段</span>
+            <span class="font-mono text-right ${isActive ? 'text-success' : 'text-warning'} font-medium">
+              ${SegmentUtil.format(seg, livePause)}
+            </span>
+          </li>`;
+      }).join('');
     }
     els.segmentCount.textContent = `(${segments.length} 段)`;
   }
 
-  /** 动画帧循环更新总时钟 */
   function loop() {
     render();
     if (running && !completed) {
@@ -516,14 +615,35 @@ const StopMotionTimer = (() => {
     }
   }
 
-  /** 更新摘要 & 提交按钮状态 */
+  /** 结束当前掐断暂停，写入暂停时长 */
+  function finalizePause() {
+    if (activeSegmentIdx === null || pauseStartTime === null) return;
+    const pauseDur = roundSec(getPauseElapsed());
+    segments[activeSegmentIdx].pauseDuration = pauseDur;
+    activeSegmentIdx = null;
+    pauseStartTime = null;
+    mode = 'stimulating';
+    updatePinchButton();
+    return pauseDur;
+  }
+
+  function formatSegmentsSummary() {
+    return segments.map((s, i) => {
+      const n = SegmentUtil.normalize(s);
+      const pause = n.pauseDuration != null ? ` 暂停${Utils.formatSeconds(n.pauseDuration)}` : '';
+      return `段${i + 1}@${Utils.formatSeconds(n.at)}${pause}`;
+    }).join(' · ');
+  }
+
   function updateSummary() {
     if (completed) {
+      const avgPause = SegmentUtil.avgPauseDuration(segments);
       els.summary.innerHTML = `
         <span class="text-white">总时长：</span>${Utils.formatSeconds(totalDuration)}
         &nbsp;|&nbsp;
         <span class="text-white">掐段数：</span>${segments.length} 段
-        ${segments.length > 0 ? '<br><span class="text-gray-500 text-xs mt-1 block">分段：' + segments.map(s => Utils.formatSeconds(s)).join(' · ') + '</span>' : ''}
+        ${avgPause != null ? `&nbsp;|&nbsp;<span class="text-white">平均暂停：</span>${Utils.formatSeconds(avgPause)}` : ''}
+        ${segments.length > 0 ? '<br><span class="text-gray-500 text-xs mt-1 block">' + formatSegmentsSummary() + '</span>' : ''}
       `;
       els.btnSubmit.disabled = false;
     } else {
@@ -532,37 +652,55 @@ const StopMotionTimer = (() => {
     }
   }
 
-  /** 开始训练 */
   function start() {
     if (running) return;
     running = true;
     completed = false;
+    mode = 'stimulating';
     startTime = Date.now();
     segments = [];
     totalDuration = 0;
+    pauseStartTime = null;
+    activeSegmentIdx = null;
     els.btnStart.disabled = true;
     els.btnPinch.disabled = false;
     els.btnComplete.disabled = false;
+    updatePinchButton();
     els.timerBox.classList.add('timer-active');
     loop();
     updateSummary();
   }
 
-  /** 掐段：记录当前时间点，计时继续 */
-  function pinch() {
+  /** 掐段：进入暂停并启动掐断计时；或继续刺激结束暂停 */
+  function togglePinch() {
     if (!running || completed) return;
-    const elapsed = getElapsed();
-    segments.push(Math.round(elapsed * 10) / 10);
-    render();
-    Toast.show(`已记录第 ${segments.length} 段：${Utils.formatSeconds(elapsed)}`, 'info');
+
+    if (mode === 'stimulating') {
+      // 记录掐断时刻，开始暂停计时
+      const elapsed = roundSec(getElapsed());
+      segments.push({ at: elapsed, pauseDuration: null });
+      activeSegmentIdx = segments.length - 1;
+      pauseStartTime = Date.now();
+      mode = 'paused';
+      updatePinchButton();
+      render();
+      Toast.show(`第 ${segments.length} 段掐断 @ ${Utils.formatSeconds(elapsed)}，暂停计时已开始`, 'info');
+    } else if (mode === 'paused') {
+      // 继续刺激，记录暂停时长
+      const pauseDur = finalizePause();
+      render();
+      Toast.show(`继续刺激，本次暂停 ${Utils.formatSeconds(pauseDur)}`, 'success');
+    }
   }
 
-  /** 完全停止：结束训练 */
   function complete() {
     if (!running || completed) return;
+    // 若结束时仍在暂停中，结算最后一段暂停时长
+    if (mode === 'paused') finalizePause();
     completed = true;
-    totalDuration = Math.round(getElapsed() * 10) / 10;
+    totalDuration = roundSec(getElapsed());
     running = false;
+    mode = 'idle';
     cancelAnimationFrame(rafId);
     els.btnPinch.disabled = true;
     els.btnComplete.disabled = true;
@@ -572,35 +710,35 @@ const StopMotionTimer = (() => {
     Toast.show(`训练结束！总时长 ${Utils.formatSeconds(totalDuration)}，共 ${segments.length} 段`, 'success');
   }
 
-  /** 重置 */
   function reset() {
     running = false;
     completed = false;
     startTime = null;
     segments = [];
     totalDuration = 0;
+    mode = 'idle';
+    pauseStartTime = null;
+    activeSegmentIdx = null;
     cancelAnimationFrame(rafId);
     els.btnStart.disabled = false;
     els.btnPinch.disabled = true;
     els.btnComplete.disabled = true;
     els.btnSubmit.disabled = true;
+    updatePinchButton();
     els.timerBox.classList.remove('timer-active');
     els.totalTime.textContent = '00:00.0';
+    els.pauseBox.classList.add('hidden');
+    els.statusBadge.classList.add('hidden');
     render();
     updateSummary();
   }
 
-  /** 获取本次训练数据（供表单提交） */
   function getSessionData() {
-    return {
-      totalDuration,
-      segments: [...segments],
-      completed,
-    };
+    return { totalDuration, segments: segments.map(s => ({ ...s })), completed };
   }
 
   els.btnStart.addEventListener('click', start);
-  els.btnPinch.addEventListener('click', pinch);
+  els.btnPinch.addEventListener('click', togglePinch);
   els.btnComplete.addEventListener('click', complete);
   els.btnReset.addEventListener('click', reset);
 
@@ -687,6 +825,17 @@ const FeedbackGen = (() => {
       } else if (avgSeg < 2) {
         parts.push('💡 建议每次训练多尝试 1-2 次掐段练习，即使感觉还早也可以提前掐断，刻意练习才能突破瓶颈。');
       }
+
+      // 掐断暂停时长趋势
+      const avgPauses = recent.map(r => SegmentUtil.avgPauseDuration(r.segments || [])).filter(v => v != null);
+      if (avgPauses.length >= 2) {
+        const pauseTrend = avgPauses[avgPauses.length - 1] - avgPauses[0];
+        if (pauseTrend > 5) {
+          parts.push('⏱️ <strong>暂停控制力提升！</strong>最近几次掐断后的平均暂停时长增加了 ' + Math.round(pauseTrend) + ' 秒，说明恢复冷静的能力在增强。');
+        } else if (pauseTrend < -5) {
+          parts.push('🔄 最近暂停时长有所缩短，可能是急于继续刺激。适当延长暂停时间（30 秒以上）有助于巩固控精效果。');
+        }
+      }
     } else if (smRecords.length === 1) {
       parts.push('🌱 已完成首次停‑动训练记录！继续坚持，3 次以上的数据就能看清趋势了。');
     }
@@ -725,11 +874,16 @@ const ChartRender = (() => {
     const labels = smRecords.map(r => r.date);
     const totalDurations = smRecords.map(r => r.totalDuration);
 
-    // 构建分段散点数据
-    const segmentPoints = [];
+    // 构建分段散点：橙点=掐断时刻，绿点=暂停时长（叠加在掐断时刻的 X 位置）
+    const pinchPoints = [];
+    const pausePoints = [];
     smRecords.forEach((r, idx) => {
-      (r.segments || []).forEach(sec => {
-        segmentPoints.push({ x: idx, y: sec });
+      (r.segments || []).forEach(seg => {
+        const s = SegmentUtil.normalize(seg);
+        pinchPoints.push({ x: idx, y: s.at });
+        if (s.pauseDuration != null) {
+          pausePoints.push({ x: idx, y: s.pauseDuration });
+        }
       });
     });
 
@@ -751,10 +905,21 @@ const ChartRender = (() => {
           },
           {
             type: 'scatter',
-            label: '掐段时间 (秒)',
-            data: segmentPoints,
+            label: '掐断时刻 (秒)',
+            data: pinchPoints,
             backgroundColor: 'rgba(245, 158, 11, 0.9)',
             borderColor: 'rgba(245, 158, 11, 1)',
+            pointRadius: 6,
+            pointHoverRadius: 8,
+            yAxisID: 'y',
+          },
+          {
+            type: 'scatter',
+            label: '暂停时长 (秒)',
+            data: pausePoints,
+            backgroundColor: 'rgba(34, 197, 94, 0.9)',
+            borderColor: 'rgba(34, 197, 94, 1)',
+            pointStyle: 'triangle',
             pointRadius: 6,
             pointHoverRadius: 8,
             yAxisID: 'y',
@@ -777,7 +942,10 @@ const ChartRender = (() => {
                 if (ctx.dataset.type === 'bar') {
                   return `总时长: ${Utils.formatSeconds(ctx.parsed.y)}`;
                 }
-                return `掐段: ${Utils.formatSeconds(ctx.parsed.y)}`;
+                if (ctx.dataset.label.includes('掐断')) {
+                  return `掐断时刻: ${Utils.formatSeconds(ctx.parsed.y)}`;
+                }
+                return `暂停时长: ${Utils.formatSeconds(ctx.parsed.y)}`;
               },
             },
           },
@@ -832,9 +1000,11 @@ const UIRender = (() => {
       }
 
       // 停‑动训练记录
-      const segList = (r.segments || []).map((s, i) =>
-        `<span class="inline-block bg-surface px-2 py-0.5 rounded text-xs text-warning mr-1 mb-1">段${i + 1}: ${Utils.formatSeconds(s)}</span>`
-      ).join('');
+      const segList = (r.segments || []).map((s, i) => {
+        const text = SegmentUtil.format(s);
+        return `<span class="inline-block bg-surface px-2 py-0.5 rounded text-xs text-warning mr-1 mb-1">段${i + 1}: ${text}</span>`;
+      }).join('');
+      const avgPause = SegmentUtil.avgPauseDuration(r.segments || []);
 
       return `
         <article class="bg-surface-card rounded-xl p-4 border border-gray-700/40 flex items-start justify-between gap-3">
@@ -843,7 +1013,7 @@ const UIRender = (() => {
               <span class="px-2 py-0.5 bg-warning/20 text-warning text-xs rounded-full">停‑动训练</span>
               <time class="text-gray-400 text-xs">${r.date}</time>
             </div>
-            <p class="text-white text-sm mb-1">总时长：<strong>${Utils.formatSeconds(r.totalDuration)}</strong> · 掐段 <strong>${(r.segments || []).length}</strong> 次</p>
+            <p class="text-white text-sm mb-1">总时长：<strong>${Utils.formatSeconds(r.totalDuration)}</strong> · 掐段 <strong>${(r.segments || []).length}</strong> 次${avgPause != null ? ` · 平均暂停 <strong>${Utils.formatSeconds(avgPause)}</strong>` : ''}</p>
             ${segList ? `<div class="mb-2">${segList}</div>` : ''}
             ${r.notes ? `<p class="text-gray-400 text-xs">备注：${r.notes}</p>` : ''}
           </div>
