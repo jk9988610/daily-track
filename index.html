@@ -992,15 +992,14 @@ document.addEventListener('DOMContentLoaded', App.init);
 
 <!--
   ══════════════════════════════════════════════════════
-  GitHub Pages 部署步骤
+  GitHub Pages 部署步骤（Actions 模式）
   ══════════════════════════════════════════════════════
-  1. 在 GitHub 创建新仓库（或使用已有仓库）
-  2. 将本 index.html 文件上传到仓库根目录
-  3. 进入仓库 Settings → Pages
-  4. Source 选择 "Deploy from a branch"
-  5. Branch 选择 main，文件夹选择 / (root)，点击 Save
-  6. 等待 1-2 分钟，访问 https://<你的用户名>.github.io/<仓库名>/
-  7. 数据保存在浏览器本地，换设备需手动导出/导入 JSON 备份
+  1. 将 index.html 与 .github/workflows/deploy.yml 推送到仓库
+  2. 进入仓库 Settings → Pages
+  3. Source 选择 "GitHub Actions"
+  4. push 到 main 分支后自动触发部署，约 1-2 分钟完成
+  5. 访问 https://<你的用户名>.github.io/<仓库名>/
+  6. 数据保存在浏览器本地，换设备需手动导出/导入 JSON 备份
   ══════════════════════════════════════════════════════
 -->
 
