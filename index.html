@@ -1,0 +1,1008 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Daily‑Track｜个人训练记录</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            surface: { DEFAULT: '#1a1d27', light: '#22263a', card: '#2a2f45', hover: '#323854' },
+            accent: { DEFAULT: '#6366f1', light: '#818cf8', dark: '#4f46e5' },
+            success: '#22c55e',
+            warning: '#f59e0b',
+            danger: '#ef4444',
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    /* 自定义滚动条 */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #1a1d27; }
+    ::-webkit-scrollbar-thumb { background: #4f46e5; border-radius: 3px; }
+    /* Toast 动画 */
+    @keyframes toast-in { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes toast-out { from { opacity: 1; transform: translateY(0); } to { opacity: 0; transform: translateY(16px); } }
+    .toast-enter { animation: toast-in 0.3s ease forwards; }
+    .toast-exit { animation: toast-out 0.3s ease forwards; }
+    /* 计时器脉冲 */
+    @keyframes pulse-ring { 0%, 100% { box-shadow: 0 0 0 0 rgba(99,102,241,0.4); } 50% { box-shadow: 0 0 0 12px rgba(99,102,241,0); } }
+    .timer-active { animation: pulse-ring 2s ease infinite; }
+    /* 导航激活态 */
+    .nav-active { background: #4f46e5; color: #fff; }
+    /* 隐藏分区 */
+    .section-hidden { display: none; }
+  </style>
+</head>
+<body class="bg-surface text-gray-100 min-h-screen">
+
+  <!-- 页头 -->
+  <header class="bg-surface-light border-b border-gray-700/50 sticky top-0 z-40 backdrop-blur-sm">
+    <div class="max-w-5xl mx-auto px-4 py-4">
+      <h1 class="text-xl sm:text-2xl font-bold text-white tracking-tight">
+        <span class="text-accent-light">Daily‑Track</span> 个人训练工作台
+      </h1>
+      <p class="text-gray-400 text-sm mt-1">数据仅存于本机浏览器，不上传服务器</p>
+    </div>
+    <!-- 分区导航 -->
+    <nav class="max-w-5xl mx-auto px-4 pb-3 flex gap-2 overflow-x-auto" id="main-nav" aria-label="页面分区导航">
+      <button data-section="kegel" class="nav-btn nav-active whitespace-nowrap px-4 py-2 rounded-lg text-sm font-medium transition-colors hover:bg-surface-hover">凯格尔训练</button>
+      <button data-section="stop-motion" class="nav-btn whitespace-nowrap px-4 py-2 rounded-lg text-sm font-medium text-gray-300 transition-colors hover:bg-surface-hover">停‑动计时训练</button>
+      <button data-section="records" class="nav-btn whitespace-nowrap px-4 py-2 rounded-lg text-sm font-medium text-gray-300 transition-colors hover:bg-surface-hover">历史记录</button>
+      <button data-section="stats" class="nav-btn whitespace-nowrap px-4 py-2 rounded-lg text-sm font-medium text-gray-300 transition-colors hover:bg-surface-hover">统计图表&分析总结</button>
+    </nav>
+  </header>
+
+  <main class="max-w-5xl mx-auto px-4 py-6 space-y-6">
+
+    <!-- ========== 凯格尔训练分区 ========== -->
+    <section id="section-kegel" aria-labelledby="kegel-heading">
+      <h2 id="kegel-heading" class="text-lg font-semibold text-accent-light mb-4">凯格尔盆底肌训练</h2>
+
+      <!-- 训练说明 -->
+      <article class="bg-surface-card rounded-xl p-5 mb-5 border border-gray-700/40">
+        <h3 class="font-medium text-white mb-3 flex items-center gap-2">
+          <svg class="w-5 h-5 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          训练要点
+        </h3>
+        <ul class="text-gray-300 text-sm space-y-2 list-disc list-inside">
+          <li>找到盆底肌：排尿时尝试中断尿流所用的肌肉即为目标肌群</li>
+          <li><strong class="text-white">收缩 3 秒</strong>，感受肌肉收紧，保持自然呼吸</li>
+          <li><strong class="text-white">放松 3 秒</strong>，完全释放肌肉张力</li>
+          <li>每组 <strong class="text-white">15 次</strong>收缩-放松循环</li>
+          <li>每日建议完成 <strong class="text-white">3–4 组</strong>，坚持规律练习</li>
+        </ul>
+      </article>
+
+      <!-- 凯格尔计时器 -->
+      <div class="bg-surface-card rounded-xl p-6 mb-5 border border-gray-700/40 text-center" id="kegel-timer-box">
+        <p class="text-gray-400 text-sm mb-2">当前阶段</p>
+        <p id="kegel-phase-label" class="text-3xl font-bold text-white mb-1">准备开始</p>
+        <p id="kegel-countdown" class="text-6xl font-mono font-bold text-accent-light mb-6">3</p>
+        <div class="flex justify-center gap-3 flex-wrap">
+          <button id="kegel-start" class="px-6 py-2.5 bg-accent hover:bg-accent-dark text-white rounded-lg font-medium transition-colors">开始</button>
+          <button id="kegel-pause" class="px-6 py-2.5 bg-surface-hover hover:bg-gray-600 text-white rounded-lg font-medium transition-colors" disabled>暂停</button>
+          <button id="kegel-reset" class="px-6 py-2.5 bg-surface-hover hover:bg-gray-600 text-gray-300 rounded-lg font-medium transition-colors">重置</button>
+        </div>
+        <p id="kegel-cycle-info" class="text-gray-500 text-sm mt-4">已完成 0 次循环</p>
+      </div>
+
+      <!-- 凯格尔打卡表单 -->
+      <form id="kegel-form" class="bg-surface-card rounded-xl p-5 border border-gray-700/40 space-y-4">
+        <h3 class="font-medium text-white">今日打卡</h3>
+        <div>
+          <label for="kegel-groups" class="block text-sm text-gray-400 mb-1">今日完成组数</label>
+          <input type="number" id="kegel-groups" min="0" max="20" value="3"
+            class="w-full bg-surface border border-gray-600 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-accent" required>
+        </div>
+        <button type="submit" class="w-full py-2.5 bg-success hover:bg-green-600 text-white rounded-lg font-medium transition-colors">提交打卡记录</button>
+      </form>
+    </section>
+
+    <!-- ========== 停‑动计时训练分区 ========== -->
+    <section id="section-stop-motion" class="section-hidden" aria-labelledby="stop-motion-heading">
+      <h2 id="stop-motion-heading" class="text-lg font-semibold text-accent-light mb-4">停‑动计时训练</h2>
+
+      <!-- 训练说明 -->
+      <article class="bg-surface-card rounded-xl p-5 mb-5 border border-gray-700/40">
+        <h3 class="font-medium text-white mb-3 flex items-center gap-2">
+          <svg class="w-5 h-5 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          停‑动训练操作要点
+        </h3>
+        <ul class="text-gray-300 text-sm space-y-2 list-disc list-inside">
+          <li>训练类型：<strong class="text-white">手淫停‑动训练</strong>，通过控制刺激节奏锻炼耐受力</li>
+          <li>点击<strong class="text-white">「开始训练」</strong>启动总计时器，总时钟持续运行不暂停</li>
+          <li>感觉接近临界时点击<strong class="text-warning">「掐段(暂停刺激)」</strong>，记录当前时间点并停止刺激，计时器继续走</li>
+          <li>可多次掐段，每次掐段代表一次成功的控精练习</li>
+          <li>训练结束时点击<strong class="text-danger">「完全停止(射精结束)」</strong>，记录本次全部分段数据</li>
+          <li>掐段越多说明控精练习做得越充分，是进步的重要指标</li>
+        </ul>
+      </article>
+
+      <!-- 停‑动计时器区域 -->
+      <div class="bg-surface-card rounded-xl p-6 mb-5 border-2 border-accent/30" id="sm-timer-box">
+        <p class="text-gray-400 text-sm text-center mb-1">总已耗时</p>
+        <p id="sm-total-time" class="text-5xl sm:text-6xl font-mono font-bold text-center text-white mb-6">00:00.0</p>
+
+        <!-- 操作按钮 -->
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+          <button id="sm-start" class="col-span-2 sm:col-span-1 py-3 bg-accent hover:bg-accent-dark text-white rounded-lg font-medium transition-colors text-sm sm:text-base">开始训练</button>
+          <button id="sm-pinch" class="py-3 bg-warning hover:bg-yellow-600 text-white rounded-lg font-bold transition-colors text-sm sm:text-base" disabled>掐段(暂停刺激)</button>
+          <button id="sm-complete" class="py-3 bg-danger hover:bg-red-600 text-white rounded-lg font-medium transition-colors text-sm sm:text-base" disabled>完全停止(射精结束)</button>
+          <button id="sm-reset" class="py-3 bg-surface-hover hover:bg-gray-600 text-gray-300 rounded-lg font-medium transition-colors text-sm sm:text-base">重置</button>
+        </div>
+
+        <!-- 分段列表 -->
+        <div>
+          <h4 class="text-sm text-gray-400 mb-2">历史掐段列表 <span id="sm-segment-count" class="text-accent-light">(0 段)</span></h4>
+          <ul id="sm-segment-list" class="space-y-2 max-h-48 overflow-y-auto">
+            <li class="text-gray-500 text-sm text-center py-4">暂无掐段记录，开始训练后点击「掐段」按钮记录</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- 停‑动打卡表单 -->
+      <form id="sm-form" class="bg-surface-card rounded-xl p-5 border border-gray-700/40 space-y-4">
+        <h3 class="font-medium text-white">提交训练记录</h3>
+        <div>
+          <label class="block text-sm text-gray-400 mb-1">训练类型</label>
+          <input type="text" value="手淫停‑动训练" readonly
+            class="w-full bg-surface/50 border border-gray-700 rounded-lg px-4 py-2.5 text-gray-400 cursor-not-allowed">
+        </div>
+        <div>
+          <label for="sm-date" class="block text-sm text-gray-400 mb-1">训练日期</label>
+          <input type="date" id="sm-date"
+            class="w-full bg-surface border border-gray-600 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-accent" required>
+        </div>
+        <div>
+          <label class="block text-sm text-gray-400 mb-1">本次训练数据（自动填充）</label>
+          <div id="sm-summary" class="bg-surface rounded-lg px-4 py-3 text-sm text-gray-400 border border-gray-700">
+            请先完成训练计时
+          </div>
+        </div>
+        <div>
+          <label for="sm-notes" class="block text-sm text-gray-400 mb-1">主观感受备注</label>
+          <textarea id="sm-notes" rows="3" placeholder="记录本次训练的感受、状态等..."
+            class="w-full bg-surface border border-gray-600 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-accent resize-none"></textarea>
+        </div>
+        <button type="submit" id="sm-submit" disabled
+          class="w-full py-2.5 bg-success hover:bg-green-600 text-white rounded-lg font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+          提交打卡记录
+        </button>
+      </form>
+    </section>
+
+    <!-- ========== 历史记录分区 ========== -->
+    <section id="section-records" class="section-hidden" aria-labelledby="records-heading">
+      <div class="flex items-center justify-between mb-4 flex-wrap gap-3">
+        <h2 id="records-heading" class="text-lg font-semibold text-accent-light">历史记录</h2>
+        <button id="export-btn" class="px-4 py-2 bg-surface-hover hover:bg-gray-600 text-gray-200 rounded-lg text-sm font-medium transition-colors flex items-center gap-2">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+          导出 JSON 备份
+        </button>
+      </div>
+      <div id="records-list" class="space-y-3">
+        <p class="text-gray-500 text-center py-12">暂无打卡记录</p>
+      </div>
+    </section>
+
+    <!-- ========== 统计图表&分析总结分区 ========== -->
+    <section id="section-stats" class="section-hidden" aria-labelledby="stats-heading">
+      <h2 id="stats-heading" class="text-lg font-semibold text-accent-light mb-4">统计图表 & 分析总结</h2>
+
+      <!-- 统计数字卡片 -->
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6" id="stats-cards">
+        <div class="bg-surface-card rounded-xl p-4 border border-gray-700/40 text-center">
+          <p class="text-2xl font-bold text-white" id="stat-total">0</p>
+          <p class="text-xs text-gray-400 mt-1">总打卡条数</p>
+        </div>
+        <div class="bg-surface-card rounded-xl p-4 border border-gray-700/40 text-center">
+          <p class="text-2xl font-bold text-white" id="stat-7days">0</p>
+          <p class="text-xs text-gray-400 mt-1">近 7 天打卡</p>
+        </div>
+        <div class="bg-surface-card rounded-xl p-4 border border-gray-700/40 text-center">
+          <p class="text-2xl font-bold text-white" id="stat-kegel-week">0</p>
+          <p class="text-xs text-gray-400 mt-1">本周凯格尔组数</p>
+        </div>
+        <div class="bg-surface-card rounded-xl p-4 border border-gray-700/40 text-center">
+          <p class="text-2xl font-bold text-white" id="stat-interval">—</p>
+          <p class="text-xs text-gray-400 mt-1">距上次训练(天)</p>
+        </div>
+      </div>
+
+      <!-- 分析总结文本 -->
+      <article class="bg-surface-card rounded-xl p-5 mb-6 border border-gray-700/40" id="analysis-box">
+        <h3 class="font-medium text-white mb-3 flex items-center gap-2">
+          <svg class="w-5 h-5 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
+          训练分析总结
+        </h3>
+        <p id="analysis-text" class="text-gray-300 text-sm leading-relaxed">暂无足够数据，完成几次训练后将自动生成分析。</p>
+      </article>
+
+      <!-- Chart.js 图表 -->
+      <div class="bg-surface-card rounded-xl p-5 border border-gray-700/40">
+        <h3 class="font-medium text-white mb-4">停‑动训练历史对比</h3>
+        <p class="text-gray-500 text-xs mb-4">柱状图 = 每次训练总时长；圆点 = 各次掐段时间点</p>
+        <div class="relative" style="height: 320px;">
+          <canvas id="training-chart"></canvas>
+        </div>
+        <p id="chart-empty" class="text-gray-500 text-center py-8 hidden">暂无停‑动训练记录，完成训练后图表将自动更新</p>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Toast 容器 -->
+  <div id="toast-container" class="fixed bottom-6 right-4 z-50 flex flex-col gap-2" aria-live="polite"></div>
+
+  <!-- 页脚部署说明 -->
+  <footer class="max-w-5xl mx-auto px-4 py-8 text-center text-gray-600 text-xs border-t border-gray-800 mt-8">
+    <p>Daily‑Track v1.0 · 纯前端本地存储 · 数据不会上传至任何服务器</p>
+  </footer>
+
+<script>
+/* ============================================================
+   Daily‑Track 个人训练工作台
+   模块化 JavaScript — 全部逻辑纯本地运行
+   ============================================================ */
+
+// ─────────────────────────────────────────────
+// 模块 1：本地存储工具
+// ─────────────────────────────────────────────
+const StorageUtil = (() => {
+  const KEY = 'daily-track-records';
+
+  /** 读取全部记录，按时间倒序 */
+  function getAll() {
+    try {
+      const raw = localStorage.getItem(KEY);
+      const list = raw ? JSON.parse(raw) : [];
+      return list.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    } catch {
+      return [];
+    }
+  }
+
+  /** 保存一条新记录 */
+  function save(record) {
+    const list = getAll();
+    list.unshift(record);
+    localStorage.setItem(KEY, JSON.stringify(list));
+  }
+
+  /** 按 id 删除单条记录 */
+  function remove(id) {
+    const list = getAll().filter(r => r.id !== id);
+    localStorage.setItem(KEY, JSON.stringify(list));
+  }
+
+  /** 导出全部记录为 JSON 字符串 */
+  function exportJSON() {
+    return JSON.stringify(getAll(), null, 2);
+  }
+
+  /** 生成唯一 ID */
+  function genId() {
+    return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+  }
+
+  return { getAll, save, remove, exportJSON, genId };
+})();
+
+// ─────────────────────────────────────────────
+// 模块 2：Toast 提示
+// ─────────────────────────────────────────────
+const Toast = (() => {
+  const container = document.getElementById('toast-container');
+
+  function show(message, type = 'info') {
+    const colors = {
+      success: 'bg-green-700 border-green-500',
+      error: 'bg-red-800 border-red-500',
+      info: 'bg-surface-card border-accent',
+    };
+    const el = document.createElement('div');
+    el.className = `toast-enter px-4 py-3 rounded-lg border text-sm text-white shadow-lg ${colors[type] || colors.info}`;
+    el.textContent = message;
+    container.appendChild(el);
+    setTimeout(() => {
+      el.classList.replace('toast-enter', 'toast-exit');
+      setTimeout(() => el.remove(), 300);
+    }, 2800);
+  }
+
+  return { show };
+})();
+
+// ─────────────────────────────────────────────
+// 模块 3：工具函数
+// ─────────────────────────────────────────────
+const Utils = (() => {
+  /** 毫秒 → MM:SS.s 格式 */
+  function formatTime(ms) {
+    const totalSec = ms / 1000;
+    const min = Math.floor(totalSec / 60);
+    const sec = Math.floor(totalSec % 60);
+    const dec = Math.floor((totalSec % 1) * 10);
+    return `${String(min).padStart(2, '0')}:${String(sec).padStart(2, '0')}.${dec}`;
+  }
+
+  /** 秒 → MM:SS 格式 */
+  function formatSeconds(sec) {
+    const min = Math.floor(sec / 60);
+    const s = Math.floor(sec % 60);
+    return `${String(min).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  }
+
+  /** 获取今天日期字符串 YYYY-MM-DD */
+  function todayStr() {
+    return new Date().toISOString().slice(0, 10);
+  }
+
+  /** 获取本周一日期 */
+  function weekStart() {
+    const d = new Date();
+    const day = d.getDay() || 7;
+    d.setDate(d.getDate() - day + 1);
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }
+
+  return { formatTime, formatSeconds, todayStr, weekStart };
+})();
+
+// ─────────────────────────────────────────────
+// 模块 4：凯格尔计时器
+// ─────────────────────────────────────────────
+const KegelTimer = (() => {
+  const CONTRACT_SEC = 3;
+  const RELAX_SEC = 3;
+
+  let phase = 'idle';       // idle | contract | relax
+  let countdown = CONTRACT_SEC;
+  let cycleCount = 0;
+  let timerId = null;
+  let tickStart = null;
+  let paused = false;
+
+  const els = {
+    phaseLabel: document.getElementById('kegel-phase-label'),
+    countdown: document.getElementById('kegel-countdown'),
+    cycleInfo: document.getElementById('kegel-cycle-info'),
+    timerBox: document.getElementById('kegel-timer-box'),
+    btnStart: document.getElementById('kegel-start'),
+    btnPause: document.getElementById('kegel-pause'),
+    btnReset: document.getElementById('kegel-reset'),
+  };
+
+  function updateDisplay() {
+    const labels = { idle: '准备开始', contract: '收缩', relax: '放松' };
+    const colors = { idle: 'text-white', contract: 'text-warning', relax: 'text-success' };
+    els.phaseLabel.textContent = labels[phase];
+    els.phaseLabel.className = `text-3xl font-bold mb-1 ${colors[phase]}`;
+    els.countdown.textContent = phase === 'idle' ? CONTRACT_SEC : countdown;
+    els.cycleInfo.textContent = `已完成 ${cycleCount} 次循环`;
+  }
+
+  function tick() {
+    const elapsed = (Date.now() - tickStart) / 1000;
+    const target = phase === 'contract' ? CONTRACT_SEC : RELAX_SEC;
+    countdown = Math.max(0, Math.ceil(target - elapsed));
+    updateDisplay();
+
+    if (elapsed >= target) {
+      // 切换阶段
+      if (phase === 'contract') {
+        phase = 'relax';
+        tickStart = Date.now();
+      } else {
+        phase = 'contract';
+        cycleCount++;
+        tickStart = Date.now();
+      }
+      countdown = phase === 'contract' ? CONTRACT_SEC : RELAX_SEC;
+      updateDisplay();
+    }
+  }
+
+  function start() {
+    if (phase === 'idle') {
+      phase = 'contract';
+      countdown = CONTRACT_SEC;
+      cycleCount = 0;
+    }
+    paused = false;
+    tickStart = Date.now() - (phase === 'contract' ? (CONTRACT_SEC - countdown) : (RELAX_SEC - countdown)) * 1000;
+    timerId = setInterval(tick, 100);
+    els.btnStart.disabled = true;
+    els.btnPause.disabled = false;
+    els.timerBox.classList.add('timer-active');
+    updateDisplay();
+  }
+
+  function pause() {
+    if (!timerId) return;
+    clearInterval(timerId);
+    timerId = null;
+    paused = true;
+    els.btnStart.disabled = false;
+    els.btnStart.textContent = '继续';
+    els.btnPause.disabled = true;
+    els.timerBox.classList.remove('timer-active');
+  }
+
+  function reset() {
+    clearInterval(timerId);
+    timerId = null;
+    phase = 'idle';
+    countdown = CONTRACT_SEC;
+    cycleCount = 0;
+    paused = false;
+    els.btnStart.disabled = false;
+    els.btnStart.textContent = '开始';
+    els.btnPause.disabled = true;
+    els.timerBox.classList.remove('timer-active');
+    updateDisplay();
+  }
+
+  els.btnStart.addEventListener('click', start);
+  els.btnPause.addEventListener('click', pause);
+  els.btnReset.addEventListener('click', reset);
+
+  return { reset };
+})();
+
+// ─────────────────────────────────────────────
+// 模块 5：停‑动掐段计时器
+// ─────────────────────────────────────────────
+const StopMotionTimer = (() => {
+  let running = false;       // 总计时是否运行中
+  let completed = false;   // 本次训练是否已结束
+  let startTime = null;    // 训练开始时间戳
+  let segments = [];       // 掐段时间点（秒）
+  let totalDuration = 0;   // 最终总时长（秒）
+  let rafId = null;
+
+  const els = {
+    totalTime: document.getElementById('sm-total-time'),
+    segmentList: document.getElementById('sm-segment-list'),
+    segmentCount: document.getElementById('sm-segment-count'),
+    timerBox: document.getElementById('sm-timer-box'),
+    summary: document.getElementById('sm-summary'),
+    btnStart: document.getElementById('sm-start'),
+    btnPinch: document.getElementById('sm-pinch'),
+    btnComplete: document.getElementById('sm-complete'),
+    btnReset: document.getElementById('sm-reset'),
+    btnSubmit: document.getElementById('sm-submit'),
+  };
+
+  /** 获取当前已耗时（秒） */
+  function getElapsed() {
+    if (!startTime) return 0;
+    if (completed) return totalDuration;
+    return (Date.now() - startTime) / 1000;
+  }
+
+  /** 刷新显示 */
+  function render() {
+    const elapsed = getElapsed();
+    els.totalTime.textContent = Utils.formatTime(elapsed * 1000);
+
+    // 渲染分段列表
+    if (segments.length === 0) {
+      els.segmentList.innerHTML = '<li class="text-gray-500 text-sm text-center py-4">暂无掐段记录，开始训练后点击「掐段」按钮记录</li>';
+    } else {
+      els.segmentList.innerHTML = segments.map((sec, i) => `
+        <li class="flex items-center justify-between bg-surface rounded-lg px-4 py-2.5 text-sm">
+          <span class="text-gray-400">第 ${i + 1} 段</span>
+          <span class="font-mono text-warning font-medium">${Utils.formatSeconds(sec)}</span>
+        </li>
+      `).join('');
+    }
+    els.segmentCount.textContent = `(${segments.length} 段)`;
+  }
+
+  /** 动画帧循环更新总时钟 */
+  function loop() {
+    render();
+    if (running && !completed) {
+      rafId = requestAnimationFrame(loop);
+    }
+  }
+
+  /** 更新摘要 & 提交按钮状态 */
+  function updateSummary() {
+    if (completed) {
+      els.summary.innerHTML = `
+        <span class="text-white">总时长：</span>${Utils.formatSeconds(totalDuration)}
+        &nbsp;|&nbsp;
+        <span class="text-white">掐段数：</span>${segments.length} 段
+        ${segments.length > 0 ? '<br><span class="text-gray-500 text-xs mt-1 block">分段：' + segments.map(s => Utils.formatSeconds(s)).join(' · ') + '</span>' : ''}
+      `;
+      els.btnSubmit.disabled = false;
+    } else {
+      els.summary.textContent = '请先完成训练计时（点击「完全停止」结束本次训练）';
+      els.btnSubmit.disabled = true;
+    }
+  }
+
+  /** 开始训练 */
+  function start() {
+    if (running) return;
+    running = true;
+    completed = false;
+    startTime = Date.now();
+    segments = [];
+    totalDuration = 0;
+    els.btnStart.disabled = true;
+    els.btnPinch.disabled = false;
+    els.btnComplete.disabled = false;
+    els.timerBox.classList.add('timer-active');
+    loop();
+    updateSummary();
+  }
+
+  /** 掐段：记录当前时间点，计时继续 */
+  function pinch() {
+    if (!running || completed) return;
+    const elapsed = getElapsed();
+    segments.push(Math.round(elapsed * 10) / 10);
+    render();
+    Toast.show(`已记录第 ${segments.length} 段：${Utils.formatSeconds(elapsed)}`, 'info');
+  }
+
+  /** 完全停止：结束训练 */
+  function complete() {
+    if (!running || completed) return;
+    completed = true;
+    totalDuration = Math.round(getElapsed() * 10) / 10;
+    running = false;
+    cancelAnimationFrame(rafId);
+    els.btnPinch.disabled = true;
+    els.btnComplete.disabled = true;
+    els.timerBox.classList.remove('timer-active');
+    render();
+    updateSummary();
+    Toast.show(`训练结束！总时长 ${Utils.formatSeconds(totalDuration)}，共 ${segments.length} 段`, 'success');
+  }
+
+  /** 重置 */
+  function reset() {
+    running = false;
+    completed = false;
+    startTime = null;
+    segments = [];
+    totalDuration = 0;
+    cancelAnimationFrame(rafId);
+    els.btnStart.disabled = false;
+    els.btnPinch.disabled = true;
+    els.btnComplete.disabled = true;
+    els.btnSubmit.disabled = true;
+    els.timerBox.classList.remove('timer-active');
+    els.totalTime.textContent = '00:00.0';
+    render();
+    updateSummary();
+  }
+
+  /** 获取本次训练数据（供表单提交） */
+  function getSessionData() {
+    return {
+      totalDuration,
+      segments: [...segments],
+      completed,
+    };
+  }
+
+  els.btnStart.addEventListener('click', start);
+  els.btnPinch.addEventListener('click', pinch);
+  els.btnComplete.addEventListener('click', complete);
+  els.btnReset.addEventListener('click', reset);
+
+  return { reset, getSessionData };
+})();
+
+// ─────────────────────────────────────────────
+// 模块 6：数据统计计算
+// ─────────────────────────────────────────────
+const StatsCalc = (() => {
+  function compute(records) {
+    const now = new Date();
+    const sevenDaysAgo = new Date(now);
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const weekStart = Utils.weekStart();
+
+    const total = records.length;
+    const last7 = records.filter(r => new Date(r.createdAt) >= sevenDaysAgo).length;
+    const kegelWeek = records
+      .filter(r => r.type === 'kegel' && new Date(r.createdAt) >= weekStart)
+      .reduce((sum, r) => sum + (r.groups || 0), 0);
+
+    let intervalDays = null;
+    if (records.length > 0) {
+      const lastDate = new Date(records[0].createdAt);
+      intervalDays = Math.floor((now - lastDate) / (1000 * 60 * 60 * 24));
+    }
+
+    // 停‑动训练专项数据
+    const smRecords = records
+      .filter(r => r.type === 'stop-motion')
+      .sort((a, b) => new Date(a.date) - new Date(b.date));
+
+    return { total, last7, kegelWeek, intervalDays, smRecords };
+  }
+
+  return { compute };
+})();
+
+// ─────────────────────────────────────────────
+// 模块 7：文本反馈生成（纯条件逻辑，无 AI 接口）
+// ─────────────────────────────────────────────
+const FeedbackGen = (() => {
+  function generate(stats) {
+    const { total, last7, intervalDays, smRecords } = stats;
+    const parts = [];
+
+    if (total === 0) {
+      return '欢迎使用 Daily‑Track！完成第一次训练打卡后，这里将自动生成个性化分析总结。坚持规律练习是进步的关键。';
+    }
+
+    // ── 训练频次分析 ──
+    if (last7 >= 5) {
+      parts.push('🎉 <strong>训练频率优秀！</strong>近 7 天打卡 ' + last7 + ' 次，保持了非常好的练习节奏，请继续保持！');
+    } else if (last7 >= 3) {
+      parts.push('✅ 近 7 天打卡 ' + last7 + ' 次，训练频率尚可，可以尝试增加到每周 5 次以上以获得更好效果。');
+    } else if (intervalDays !== null && intervalDays > 5) {
+      parts.push('💪 <strong>加油！</strong>距离上次训练已过去 ' + intervalDays + ' 天，建议尽快恢复练习。哪怕每天 10 分钟，坚持比强度更重要。');
+    } else if (last7 < 2) {
+      parts.push('📅 近 7 天打卡较少，建议制定固定训练时间（如每晚睡前），养成习惯后进步会更明显。');
+    }
+
+    // ── 停‑动训练专项分析 ──
+    if (smRecords.length >= 2) {
+      const recent = smRecords.slice(-3);
+      const durations = recent.map(r => r.totalDuration);
+      const segCounts = recent.map(r => (r.segments || []).length);
+
+      // 总时长趋势
+      const durationTrend = durations[durations.length - 1] - durations[0];
+      if (durationTrend > 30) {
+        parts.push('📈 <strong>总时长明显进步！</strong>最近几次训练的总时长呈上升趋势（+' + Math.round(durationTrend) + ' 秒），耐受力在稳步提升，非常棒！');
+      } else if (durationTrend < -30) {
+        parts.push('🌊 最近总时长有所波动下降，这完全正常——身体状态、睡眠、压力都会影响表现，不必焦虑。休息好后再练，往往会有惊喜。');
+      } else {
+        parts.push('📊 最近几次训练总时长较稳定，说明基础耐受力已经建立，可以尝试增加掐段次数来进一步挑战自己。');
+      }
+
+      // 掐段数量趋势
+      const segTrend = segCounts[segCounts.length - 1] - segCounts[0];
+      const avgSeg = segCounts.reduce((a, b) => a + b, 0) / segCounts.length;
+      if (segTrend > 0 || avgSeg >= 3) {
+        parts.push('🎯 掐段练习做得充分（平均 ' + avgSeg.toFixed(1) + ' 段/次），控精训练到位，这是核心进步指标！');
+      } else if (avgSeg < 2) {
+        parts.push('💡 建议每次训练多尝试 1-2 次掐段练习，即使感觉还早也可以提前掐断，刻意练习才能突破瓶颈。');
+      }
+    } else if (smRecords.length === 1) {
+      parts.push('🌱 已完成首次停‑动训练记录！继续坚持，3 次以上的数据就能看清趋势了。');
+    }
+
+    // ── 凯格尔提醒 ──
+    if (stats.kegelWeek < 9) {
+      parts.push('🏋️ 本周凯格尔训练组数 ' + stats.kegelWeek + ' 组，建议每日 3-4 组（每周 21-28 组），盆底肌力量是停‑动训练的重要基础。');
+    }
+
+    return parts.join('<br><br>');
+  }
+
+  return { generate };
+})();
+
+// ─────────────────────────────────────────────
+// 模块 8：Chart.js 图表渲染
+// ─────────────────────────────────────────────
+const ChartRender = (() => {
+  let chartInstance = null;
+
+  function render(smRecords) {
+    const canvas = document.getElementById('training-chart');
+    const emptyMsg = document.getElementById('chart-empty');
+
+    if (smRecords.length === 0) {
+      canvas.classList.add('hidden');
+      emptyMsg.classList.remove('hidden');
+      if (chartInstance) { chartInstance.destroy(); chartInstance = null; }
+      return;
+    }
+
+    canvas.classList.remove('hidden');
+    emptyMsg.classList.add('hidden');
+
+    const labels = smRecords.map(r => r.date);
+    const totalDurations = smRecords.map(r => r.totalDuration);
+
+    // 构建分段散点数据
+    const segmentPoints = [];
+    smRecords.forEach((r, idx) => {
+      (r.segments || []).forEach(sec => {
+        segmentPoints.push({ x: idx, y: sec });
+      });
+    });
+
+    if (chartInstance) chartInstance.destroy();
+
+    chartInstance = new Chart(canvas, {
+      data: {
+        labels,
+        datasets: [
+          {
+            type: 'bar',
+            label: '总时长 (秒)',
+            data: totalDurations,
+            backgroundColor: 'rgba(99, 102, 241, 0.6)',
+            borderColor: 'rgba(99, 102, 241, 1)',
+            borderWidth: 1,
+            borderRadius: 4,
+            yAxisID: 'y',
+          },
+          {
+            type: 'scatter',
+            label: '掐段时间 (秒)',
+            data: segmentPoints,
+            backgroundColor: 'rgba(245, 158, 11, 0.9)',
+            borderColor: 'rgba(245, 158, 11, 1)',
+            pointRadius: 6,
+            pointHoverRadius: 8,
+            yAxisID: 'y',
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: { labels: { color: '#9ca3af', font: { size: 12 } } },
+          tooltip: {
+            callbacks: {
+              title: (items) => {
+                const idx = items[0].dataIndex;
+                return smRecords[idx]?.date || '';
+              },
+              label: (ctx) => {
+                if (ctx.dataset.type === 'bar') {
+                  return `总时长: ${Utils.formatSeconds(ctx.parsed.y)}`;
+                }
+                return `掐段: ${Utils.formatSeconds(ctx.parsed.y)}`;
+              },
+            },
+          },
+        },
+        scales: {
+          x: {
+            ticks: { color: '#6b7280', font: { size: 11 } },
+            grid: { color: 'rgba(75, 85, 99, 0.2)' },
+          },
+          y: {
+            beginAtZero: true,
+            title: { display: true, text: '秒', color: '#6b7280' },
+            ticks: { color: '#6b7280' },
+            grid: { color: 'rgba(75, 85, 99, 0.2)' },
+          },
+        },
+      },
+    });
+  }
+
+  return { render };
+})();
+
+// ─────────────────────────────────────────────
+// 模块 9：UI 渲染 — 记录列表 & 统计面板
+// ─────────────────────────────────────────────
+const UIRender = (() => {
+  function renderRecords() {
+    const container = document.getElementById('records-list');
+    const records = StorageUtil.getAll();
+
+    if (records.length === 0) {
+      container.innerHTML = '<p class="text-gray-500 text-center py-12">暂无打卡记录</p>';
+      return;
+    }
+
+    container.innerHTML = records.map(r => {
+      if (r.type === 'kegel') {
+        return `
+          <article class="bg-surface-card rounded-xl p-4 border border-gray-700/40 flex items-start justify-between gap-3">
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-2 mb-2">
+                <span class="px-2 py-0.5 bg-accent/20 text-accent-light text-xs rounded-full">凯格尔</span>
+                <time class="text-gray-400 text-xs">${r.date}</time>
+              </div>
+              <p class="text-white text-sm">完成 <strong>${r.groups}</strong> 组</p>
+            </div>
+            <button onclick="App.deleteRecord('${r.id}')" class="shrink-0 p-2 text-gray-500 hover:text-danger transition-colors" title="删除" aria-label="删除记录">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+            </button>
+          </article>`;
+      }
+
+      // 停‑动训练记录
+      const segList = (r.segments || []).map((s, i) =>
+        `<span class="inline-block bg-surface px-2 py-0.5 rounded text-xs text-warning mr-1 mb-1">段${i + 1}: ${Utils.formatSeconds(s)}</span>`
+      ).join('');
+
+      return `
+        <article class="bg-surface-card rounded-xl p-4 border border-gray-700/40 flex items-start justify-between gap-3">
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-2 mb-2 flex-wrap">
+              <span class="px-2 py-0.5 bg-warning/20 text-warning text-xs rounded-full">停‑动训练</span>
+              <time class="text-gray-400 text-xs">${r.date}</time>
+            </div>
+            <p class="text-white text-sm mb-1">总时长：<strong>${Utils.formatSeconds(r.totalDuration)}</strong> · 掐段 <strong>${(r.segments || []).length}</strong> 次</p>
+            ${segList ? `<div class="mb-2">${segList}</div>` : ''}
+            ${r.notes ? `<p class="text-gray-400 text-xs">备注：${r.notes}</p>` : ''}
+          </div>
+          <button onclick="App.deleteRecord('${r.id}')" class="shrink-0 p-2 text-gray-500 hover:text-danger transition-colors" title="删除" aria-label="删除记录">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+          </button>
+        </article>`;
+    }).join('');
+  }
+
+  function renderStats() {
+    const records = StorageUtil.getAll();
+    const stats = StatsCalc.compute(records);
+
+    document.getElementById('stat-total').textContent = stats.total;
+    document.getElementById('stat-7days').textContent = stats.last7;
+    document.getElementById('stat-kegel-week').textContent = stats.kegelWeek;
+    document.getElementById('stat-interval').textContent =
+      stats.intervalDays !== null ? stats.intervalDays : '—';
+
+    document.getElementById('analysis-text').innerHTML = FeedbackGen.generate(stats);
+    ChartRender.render(stats.smRecords);
+  }
+
+  function refresh() {
+    renderRecords();
+    renderStats();
+  }
+
+  return { refresh, renderRecords, renderStats };
+})();
+
+// ─────────────────────────────────────────────
+// 模块 10：应用主控制器
+// ─────────────────────────────────────────────
+const App = (() => {
+  // 分区导航切换
+  function initNav() {
+    const btns = document.querySelectorAll('.nav-btn');
+    btns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const section = btn.dataset.section;
+        btns.forEach(b => b.classList.toggle('nav-active', b === btn));
+        document.querySelectorAll('main > section').forEach(s => {
+          s.classList.toggle('section-hidden', s.id !== `section-${section}`);
+        });
+        // 切换到统计页时刷新图表
+        if (section === 'stats') UIRender.renderStats();
+      });
+    });
+  }
+
+  // 凯格尔表单提交
+  function initKegelForm() {
+    document.getElementById('kegel-form').addEventListener('submit', e => {
+      e.preventDefault();
+      const groups = parseInt(document.getElementById('kegel-groups').value, 10);
+      if (isNaN(groups) || groups < 0) {
+        Toast.show('请输入有效的组数', 'error');
+        return;
+      }
+      StorageUtil.save({
+        id: StorageUtil.genId(),
+        type: 'kegel',
+        date: Utils.todayStr(),
+        groups,
+        createdAt: new Date().toISOString(),
+      });
+      Toast.show(`凯格尔打卡成功！今日完成 ${groups} 组`, 'success');
+      UIRender.refresh();
+    });
+  }
+
+  // 停‑动表单提交
+  function initStopMotionForm() {
+    // 默认日期为今天
+    document.getElementById('sm-date').value = Utils.todayStr();
+
+    document.getElementById('sm-form').addEventListener('submit', e => {
+      e.preventDefault();
+      const session = StopMotionTimer.getSessionData();
+      if (!session.completed) {
+        Toast.show('请先完成训练并点击「完全停止」', 'error');
+        return;
+      }
+      const date = document.getElementById('sm-date').value;
+      const notes = document.getElementById('sm-notes').value.trim();
+
+      StorageUtil.save({
+        id: StorageUtil.genId(),
+        type: 'stop-motion',
+        trainingType: '手淫停‑动训练',
+        date,
+        totalDuration: session.totalDuration,
+        segments: session.segments,
+        notes,
+        createdAt: new Date().toISOString(),
+      });
+
+      Toast.show('停‑动训练记录已保存！', 'success');
+      StopMotionTimer.reset();
+      document.getElementById('sm-notes').value = '';
+      document.getElementById('sm-date').value = Utils.todayStr();
+      UIRender.refresh();
+    });
+  }
+
+  // 导出 JSON
+  function initExport() {
+    document.getElementById('export-btn').addEventListener('click', () => {
+      const data = StorageUtil.exportJSON();
+      const blob = new Blob([data], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `daily-track-backup-${Utils.todayStr()}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      Toast.show('JSON 备份文件已下载', 'success');
+    });
+  }
+
+  // 删除记录
+  function deleteRecord(id) {
+    if (!confirm('确定删除这条记录吗？')) return;
+    StorageUtil.remove(id);
+    Toast.show('记录已删除', 'info');
+    UIRender.refresh();
+  }
+
+  // 初始化
+  function init() {
+    initNav();
+    initKegelForm();
+    initStopMotionForm();
+    initExport();
+    UIRender.refresh();
+  }
+
+  return { init, deleteRecord };
+})();
+
+// 启动应用
+document.addEventListener('DOMContentLoaded', App.init);
+</script>
+
+<!--
+  ══════════════════════════════════════════════════════
+  GitHub Pages 部署步骤
+  ══════════════════════════════════════════════════════
+  1. 在 GitHub 创建新仓库（或使用已有仓库）
+  2. 将本 index.html 文件上传到仓库根目录
+  3. 进入仓库 Settings → Pages
+  4. Source 选择 "Deploy from a branch"
+  5. Branch 选择 main，文件夹选择 / (root)，点击 Save
+  6. 等待 1-2 分钟，访问 https://<你的用户名>.github.io/<仓库名>/
+  7. 数据保存在浏览器本地，换设备需手动导出/导入 JSON 备份
+  ══════════════════════════════════════════════════════
+-->
+
+</body>
+</html>
